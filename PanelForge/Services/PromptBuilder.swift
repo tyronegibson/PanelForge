@@ -6,7 +6,12 @@ struct PromptBuilder {
     private static let mangaStyleTokens  = "manga, ink, black and white, hatching, panel art"
     private static let colorStyleTokens  = "comic book, cel shading, vibrant colors, panel art"
 
-    private static let sharedNegative    = "blurry, low quality, deformed, text, watermark"
+    /// Quality terms plus a safety baseline. The safety terms are always present and cannot be
+    /// removed from the UI; they steer the image model away from explicit output even when a
+    /// LoRA or prompt pushes toward it. (The hard block lives in `ContentPolicy`.)
+    static let qualityNegative   = "blurry, low quality, deformed, text, watermark"
+    static let safetyNegative    = "nsfw, nudity, nude, naked, explicit, sexual content, suggestive, cleavage, underwear"
+    private static let sharedNegative = qualityNegative + ", " + safetyNegative
     private static let mangaNegativeExtra = "color, colorized"
 
     // MARK: - Public API

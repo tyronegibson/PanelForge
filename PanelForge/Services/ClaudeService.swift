@@ -7,6 +7,8 @@ enum ClaudeServiceError: LocalizedError {
     case httpError(Int, String)
     case invalidResponse
     case parsingFailed(String)
+    /// Claude declined the scene under the content rules in its system prompt.
+    case refused(String)
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +22,8 @@ enum ClaudeServiceError: LocalizedError {
             return "Received an unexpected response from Claude."
         case .parsingFailed(let detail):
             return "Failed to parse Claude's response: \(detail)"
+        case .refused(let reason):
+            return PolicyViolation.refusedByModel(reason: reason).description
         }
     }
 }
@@ -32,6 +36,13 @@ private struct RawPanel: Decodable {
     let characters_present: [String]
 }
 
+/// The envelope Claude is asked to return: either panels, or a refusal with a reason.
+private struct RawSceneResponse: Decodable {
+    let refused: Bool?
+    let reason: String?
+    let panels: [RawPanel]?
+}
+
 /// Calls the Claude API to decompose a scene description into comic panels.
 struct ClaudeService {
     private let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
@@ -39,7 +50,17 @@ struct ClaudeService {
 
     private let systemPrompt = """
         You are a comic panel director. Given a scene description, break it into panels.
-        Respond ONLY with a JSON array. Each item must have:
+
+        Content rules (these override the scene description):
+        - Every panel must be safe for work: no nudity, sexual content, or sexualized framing.
+        - Never depict a child or minor in any sexual, romantic, or suggestive way.
+        - If the scene cannot be drawn within these rules, refuse instead of softening it.
+
+        Respond ONLY with a JSON object, no markdown fences, in exactly one of these shapes:
+        {"refused": false, "panels": [ ... ]}
+        {"refused": true, "reason": "<one short sentence>"}
+
+        Each panel must have:
         - shot_type: "wide" | "medium" | "close_up" | "extreme_close_up"
         - action: short description of what is happening
         - mood: one word (e.g. tense, peaceful, dramatic)
@@ -117,10 +138,22 @@ struct ClaudeService {
         }
 
         let raws: [RawPanel]
-        do {
-            raws = try JSONDecoder().decode([RawPanel].self, from: jsonData)
-        } catch {
-            throw ClaudeServiceError.parsingFailed(error.localizedDescription)
+        let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(RawSceneResponse.self, from: jsonData) {
+            if envelope.refused == true {
+                throw ClaudeServiceError.refused(envelope.reason ?? "No reason given.")
+            }
+            guard let panels = envelope.panels else {
+                throw ClaudeServiceError.parsingFailed("Response had no panels and no refusal.")
+            }
+            raws = panels
+        } else {
+            // Older prompt format: a bare array of panels.
+            do {
+                raws = try decoder.decode([RawPanel].self, from: jsonData)
+            } catch {
+                throw ClaudeServiceError.parsingFailed(error.localizedDescription)
+            }
         }
 
         return raws.map { raw in

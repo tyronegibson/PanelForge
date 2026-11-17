@@ -35,6 +35,14 @@ final class GeneratorViewModel: ObservableObject {
     func generate(scene: ComicScene) async {
         guard !phase.isActive else { return }
         errorMessage = nil
+
+        // 0. Policy check on the user's input before anything leaves the device.
+        if case .block(let violations) = ContentPolicy.checkInput(
+            sceneDescription: scene.description, loras: scene.selectedLoRAs) {
+            fail(Self.message(for: violations))
+            return
+        }
+
         phase = .parsingScene
 
         // 1. Ask Claude to parse the scene.
@@ -43,6 +51,12 @@ final class GeneratorViewModel: ObservableObject {
             rawPanels = try await claude.parseScene(scene.description)
         } catch {
             fail(error.localizedDescription)
+            return
+        }
+
+        // 1b. Policy check on Claude's panels before anything is sent to ComfyUI.
+        if case .block(let violations) = ContentPolicy.checkPanels(rawPanels, loras: scene.selectedLoRAs) {
+            fail(Self.message(for: violations))
             return
         }
 
@@ -100,6 +114,10 @@ final class GeneratorViewModel: ObservableObject {
     }
 
     // MARK: - Private
+
+    private static func message(for violations: [PolicyViolation]) -> String {
+        violations.map(\.description).joined(separator: "\n")
+    }
 
     private func fail(_ message: String) {
         errorMessage = message
