@@ -27,7 +27,7 @@ Image models will render whatever the prompt describes, and LoRAs can pull outpu
 2. **Instructions to Claude** (`Services/ClaudeService.swift`). The scene director must keep every panel SFW, never depict a minor in a sexual, romantic or suggestive way, and refuse rather than soften. It answers in a JSON envelope with a `refused` flag and a reason, and the app surfaces the refusal.
 3. **A safety baseline in every negative prompt** (`Services/PromptBuilder.swift`). Terms like `nsfw, nudity, explicit, sexual content` are always appended and can't be removed from the UI.
 
-The policy layer has unit tests (`PanelForgeTests/ContentPolicyTests.swift`) covering ordinary scenes that must pass, explicit scenes that must block, minors with suggestive wording, LoRA triggers, panels returned by the model, and false positives like "Sussex".
+The policy layer has 13 unit tests (`PanelForgeTests/ContentPolicyTests.swift`, all passing on macOS via `xcodebuild test`) covering ordinary scenes that must pass, explicit scenes that must block, minors with suggestive wording, LoRA triggers, panels returned by the model, and false positives like "Sussex".
 
 **Known limits:** keyword lists catch clear cases, not euphemisms or other languages, and nothing here inspects the generated pixels. The next step would be an on-device image classifier on each panel before it is saved.
 
